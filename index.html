@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Онлайн билети – Международен панаир Пловдив</title>
+  <meta name="description" content="Закупете онлайн билети за събитията на Международен панаир Пловдив.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Към съдържанието</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#" class="brand" data-nav="events">
+        <span class="brand-mark" aria-hidden="true">МПП</span>
+        <span class="brand-text">
+          <strong>Международен панаир Пловдив</strong>
+          <small>Онлайн билети</small>
+        </span>
+      </a>
+      <nav class="main-nav" aria-label="Основна навигация">
+        <a href="#" data-nav="events">Събития</a>
+        <a href="#" data-nav="my-tickets">Моите билети <span class="badge" id="myTicketsCount" hidden></span></a>
+        <a href="#" data-nav="help">Помощ</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" class="container">
+
+    <!-- Стъпки на поръчката -->
+    <ol class="stepper" id="stepper" aria-label="Стъпки на поръчката">
+      <li data-step="1"><span>1</span> <em>Събитие</em></li>
+      <li data-step="2"><span>2</span> <em>Билети</em></li>
+      <li data-step="3"><span>3</span> <em>Данни</em></li>
+      <li data-step="4"><span>4</span> <em>Плащане</em></li>
+      <li data-step="5"><span>5</span> <em>Готово</em></li>
+    </ol>
+
+    <!-- 1. Избор на събитие -->
+    <section class="view" id="view-events" aria-labelledby="h-events">
+      <div class="hero">
+        <h1 id="h-events">Купете билет онлайн</h1>
+        <p>Изберете събитие, ден на посещение и вид билет. Електронният билет с QR код се получава веднага и се показва на входа от телефона.</p>
+      </div>
+      <div class="event-grid" id="eventGrid"></div>
+    </section>
+
+    <!-- 2. Билети -->
+    <section class="view" id="view-tickets" hidden aria-labelledby="h-tickets">
+      <button class="link-back" data-goto="1">← Обратно към събитията</button>
+      <div class="layout-2col">
+        <div>
+          <h2 id="h-tickets">Изберете билети</h2>
+          <div class="event-summary" id="eventSummary"></div>
+
+          <fieldset class="card">
+            <legend>Ден на посещение</legend>
+            <div class="date-list" id="dateList" role="radiogroup" aria-label="Ден на посещение"></div>
+          </fieldset>
+
+          <fieldset class="card">
+            <legend>Вид и брой билети</legend>
+            <div id="ticketTypeList" class="ticket-types"></div>
+          </fieldset>
+          <p class="error-msg" id="ticketsError" role="alert"></p>
+        </div>
+        <aside class="order-aside" aria-label="Обобщение на поръчката">
+          <div class="card sticky" id="orderSummary2"></div>
+          <button class="btn btn-primary btn-block" id="toDetails">Продължи</button>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 3. Данни за купувача -->
+    <section class="view" id="view-details" hidden aria-labelledby="h-details">
+      <button class="link-back" data-goto="2">← Обратно към билетите</button>
+      <div class="layout-2col">
+        <form id="detailsForm" class="card" novalidate>
+          <h2 id="h-details">Данни за купувача</h2>
+          <div class="form-grid">
+            <div class="field">
+              <label for="firstName">Име *</label>
+              <input id="firstName" name="firstName" autocomplete="given-name" required>
+              <span class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="lastName">Фамилия *</label>
+              <input id="lastName" name="lastName" autocomplete="family-name" required>
+              <span class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="email">Имейл *</label>
+              <input id="email" name="email" type="email" autocomplete="email" required>
+              <small class="hint">Билетите ще бъдат изпратени на този адрес.</small>
+              <span class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="email2">Повторете имейла *</label>
+              <input id="email2" name="email2" type="email" autocomplete="off" required>
+              <span class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="phone">Телефон *</label>
+              <input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="+359 88 123 4567" required>
+              <span class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="company">Фирма / организация</label>
+              <input id="company" name="company" autocomplete="organization">
+            </div>
+          </div>
+
+          <div class="field checkbox-field">
+            <label><input type="checkbox" id="wantInvoice" name="wantInvoice"> Желая фактура</label>
+          </div>
+          <div class="form-grid" id="invoiceFields" hidden>
+            <div class="field">
+              <label for="invCompany">Име на фирмата *</label>
+              <input id="invCompany" name="invCompany">
+              <span class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="invEik">ЕИК / БУЛСТАТ *</label>
+              <input id="invEik" name="invEik" inputmode="numeric" maxlength="13">
+              <span class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="invVat">ДДС номер</label>
+              <input id="invVat" name="invVat" placeholder="BG123456789">
+              <span class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="invMol">МОЛ *</label>
+              <input id="invMol" name="invMol">
+              <span class="field-error"></span>
+            </div>
+            <div class="field field-wide">
+              <label for="invAddress">Адрес на регистрация *</label>
+              <input id="invAddress" name="invAddress">
+              <span class="field-error"></span>
+            </div>
+          </div>
+
+          <div class="field checkbox-field">
+            <label><input type="checkbox" id="acceptTerms" name="acceptTerms" required> Приемам <a href="#" data-nav="help">общите условия</a> и <a href="#" data-nav="help">политиката за поверителност</a> *</label>
+            <span class="field-error"></span>
+          </div>
+          <div class="field checkbox-field">
+            <label><input type="checkbox" id="newsletter" name="newsletter"> Искам да получавам информация за предстоящи събития</label>
+          </div>
+
+          <button type="submit" class="btn btn-primary">Към плащане</button>
+        </form>
+        <aside class="order-aside" aria-label="Обобщение на поръчката">
+          <div class="card sticky" id="orderSummary3"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 4. Плащане -->
+    <section class="view" id="view-payment" hidden aria-labelledby="h-payment">
+      <button class="link-back" data-goto="3">← Обратно към данните</button>
+      <div class="layout-2col">
+        <form id="paymentForm" class="card" novalidate>
+          <h2 id="h-payment">Плащане</h2>
+          <div class="demo-banner" id="demoBanner" role="note">
+            <strong>Демонстрационен режим.</strong> Не се извършва реално плащане. За тест използвайте карта <code>4242 4242 4242 4242</code>, произволна бъдеща дата и CVC.
+          </div>
+
+          <div class="pay-methods" role="radiogroup" aria-label="Метод на плащане">
+            <label class="pay-method"><input type="radio" name="payMethod" value="card" checked> Дебитна / кредитна карта</label>
+            <label class="pay-method"><input type="radio" name="payMethod" value="bank"> Банков превод</label>
+          </div>
+
+          <div id="cardFields">
+            <div class="field">
+              <label for="cardName">Име на картодържателя *</label>
+              <input id="cardName" autocomplete="cc-name">
+              <span class="field-error"></span>
+            </div>
+            <div class="field">
+              <label for="cardNumber">Номер на карта *</label>
+              <input id="cardNumber" inputmode="numeric" autocomplete="cc-number" placeholder="0000 0000 0000 0000" maxlength="23">
+              <span class="field-error"></span>
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label for="cardExp">Валидност (ММ/ГГ) *</label>
+                <input id="cardExp" inputmode="numeric" autocomplete="cc-exp" placeholder="ММ/ГГ" maxlength="5">
+                <span class="field-error"></span>
+              </div>
+              <div class="field">
+                <label for="cardCvc">CVC *</label>
+                <input id="cardCvc" inputmode="numeric" autocomplete="cc-csc" placeholder="123" maxlength="4">
+                <span class="field-error"></span>
+              </div>
+            </div>
+          </div>
+
+          <div id="bankFields" hidden>
+            <p>Билетите ще бъдат активирани след постъпване на сумата по сметката. Резервацията е валидна 3 работни дни.</p>
+            <dl class="bank-details">
+              <dt>Получател</dt><dd id="bankRecipient">—</dd>
+              <dt>IBAN</dt><dd id="bankIban">—</dd>
+              <dt>Основание</dt><dd>Номер на поръчката (показва се след потвърждение)</dd>
+            </dl>
+          </div>
+
+          <p class="error-msg" id="paymentError" role="alert"></p>
+          <button type="submit" class="btn btn-primary" id="payBtn">Плати</button>
+        </form>
+        <aside class="order-aside" aria-label="Обобщение на поръчката">
+          <div class="card sticky" id="orderSummary4"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 5. Потвърждение -->
+    <section class="view" id="view-done" hidden aria-labelledby="h-done">
+      <div class="card done-card">
+        <div class="done-icon" aria-hidden="true">✓</div>
+        <h2 id="h-done">Поръчката е успешна!</h2>
+        <p id="doneText"></p>
+        <div class="done-actions">
+          <button class="btn btn-secondary" id="printTickets">Принтирай / запази като PDF</button>
+          <button class="btn btn-ghost" data-nav="events">Купи още билети</button>
+        </div>
+      </div>
+      <div class="tickets-list" id="doneTickets"></div>
+    </section>
+
+    <!-- Моите билети -->
+    <section class="view" id="view-my-tickets" hidden aria-labelledby="h-my">
+      <h1 id="h-my">Моите билети</h1>
+      <p class="muted">Билетите се пазят в този браузър. Копие е изпратено и на имейла, посочен при поръчката.</p>
+      <form id="lookupForm" class="card lookup" novalidate>
+        <h2>Намери поръчка</h2>
+        <p class="muted">Купили сте от друго устройство? Въведете номера на поръчката и имейла.</p>
+        <div class="form-grid">
+          <div class="field">
+            <label for="lookupId">Номер на поръчка</label>
+            <input id="lookupId" placeholder="MPP-2026-XXXXXX" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="lookupEmail">Имейл</label>
+            <input id="lookupEmail" type="email" autocomplete="email">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-ghost">Търси</button>
+        <p class="muted" id="lookupMsg" role="status"></p>
+      </form>
+      <div id="myTicketsList"></div>
+    </section>
+
+    <!-- Помощ -->
+    <section class="view" id="view-help" hidden aria-labelledby="h-help">
+      <h1 id="h-help">Помощ и условия</h1>
+      <div class="faq">
+        <details open>
+          <summary>Как да използвам електронния билет?</summary>
+          <p>Покажете QR кода от телефона си или разпечатан на входа. Всеки билет е валиден за посочения ден (многократният — за всички дни на събитието).</p>
+        </details>
+        <details>
+          <summary>Кой има право на намален билет?</summary>
+          <p>Ученици, студенти, пенсионери и хора с увреждания при представяне на валиден документ на входа.</p>
+        </details>
+        <details>
+          <summary>Има ли отстъпка за групи?</summary>
+          <p id="groupInfo"></p>
+        </details>
+        <details>
+          <summary>Мога ли да върна билет?</summary>
+          <p>Закупените билети могат да бъдат върнати до 48 часа преди деня на посещение чрез запитване на имейла за контакт. При отмяна на събитието сумата се възстановява изцяло.</p>
+        </details>
+        <details>
+          <summary>Как да получа фактура?</summary>
+          <p>Отбележете „Желая фактура“ при въвеждане на данните и попълнете данните на фирмата. Фактурата се изпраща по имейл.</p>
+        </details>
+        <details>
+          <summary>Защита на личните данни</summary>
+          <p>Личните данни се използват единствено за издаване на билети и фактури и се обработват съгласно Регламент (ЕС) 2016/679 (GDPR).</p>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p id="venueText"></p>
+      <p class="muted">© <span id="year"></span> Международен панаир Пловдив</p>
+    </div>
+  </footer>
+
+  <script src="assets/vendor/qrcode-generator.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
