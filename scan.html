@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#0b5ea8">
+  <title>Контрол на входа – МПП</title>
+  <link rel="stylesheet" href="assets/css/scan.css">
+</head>
+<body>
+
+  <!-- Вход -->
+  <section id="loginView" class="screen login" aria-labelledby="h-login">
+    <form id="loginForm" class="login-card" novalidate>
+      <div class="brand-mark" aria-hidden="true">МПП</div>
+      <h1 id="h-login">Контрол на входа</h1>
+      <p class="muted">Въведете ключа за достъп, получен от организатора.</p>
+      <label for="token">Ключ за достъп</label>
+      <input id="token" type="password" autocomplete="current-password" required>
+      <label class="check"><input type="checkbox" id="remember" checked> Запомни на това устройство</label>
+      <button type="submit" class="btn btn-primary" id="loginBtn">Вход</button>
+      <p class="error" id="loginError" role="alert"></p>
+    </form>
+  </section>
+
+  <!-- Сканиране -->
+  <section id="scanView" class="screen" hidden aria-label="Сканиране на билети">
+    <header class="topbar">
+      <div class="topbar-info">
+        <strong id="todayText"></strong>
+        <span id="eventsText" class="muted-light"></span>
+      </div>
+      <button class="btn-icon" id="logoutBtn" aria-label="Изход">Изход</button>
+    </header>
+
+    <div class="counters" aria-live="polite">
+      <div class="counter ok"><b id="cntOk">0</b><span>пуснати</span></div>
+      <div class="counter bad"><b id="cntBad">0</b><span>отказани</span></div>
+    </div>
+
+    <div class="camera" id="camera">
+      <video id="video" playsinline muted></video>
+      <div class="guide" aria-hidden="true"></div>
+      <div class="camera-msg" id="cameraMsg">
+        <p id="cameraMsgText">Насочете камерата към QR кода на билета.</p>
+        <button class="btn btn-primary" id="startCamBtn">Включи камерата</button>
+      </div>
+      <button class="btn-icon cam-switch" id="switchCamBtn" hidden aria-label="Смени камерата">⟲ Камера</button>
+    </div>
+
+    <form id="manualForm" class="manual" novalidate>
+      <label for="manualCode">Ръчно въвеждане на код</label>
+      <div class="manual-row">
+        <input id="manualCode" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <button type="submit" class="btn btn-primary">Провери</button>
+      </div>
+    </form>
+
+    <section class="history" aria-labelledby="h-history">
+      <h2 id="h-history">Последни проверки</h2>
+      <ol id="historyList"></ol>
+    </section>
+  </section>
+
+  <!-- Резултат -->
+  <div id="result" class="result" hidden role="alertdialog" aria-live="assertive" aria-labelledby="resultTitle">
+    <div class="result-inner">
+      <div class="result-icon" id="resultIcon" aria-hidden="true"></div>
+      <h2 id="resultTitle"></h2>
+      <p id="resultMsg"></p>
+      <dl id="resultDetails"></dl>
+      <button class="btn btn-light" id="nextBtn">Следващ билет</button>
+    </div>
+  </div>
+
+  <canvas id="canvas" hidden></canvas>
+  <script src="assets/vendor/jsQR.js"></script>
+  <script src="assets/js/scan.js"></script>
+</body>
+</html>

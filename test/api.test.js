@@ -20,6 +20,7 @@ function setup(overrides = {}) {
     trustProxy: 0,
     timeZone: "Europe/Sofia",
     adminToken: "secret-token",
+    scannerToken: "gate-token",
     paymentMode: "demo",
     bank: { recipient: "Тест ЕАД", iban: "BG00TEST00000000000000", bankName: "" },
     ...overrides
@@ -101,7 +102,7 @@ test("банков превод: чака плащане, админ потвъ�
   assert.deepEqual(s.sent.map((x) => x[0]), ["bank"]);
 
   const code = r.body.order.tickets[0].code;
-  const unpaid = await s.req("POST", "/api/admin/tickets/check", { code }, ADMIN);
+  const unpaid = await s.req("POST", "/api/scan/check", { code }, ADMIN);
   assert.equal(unpaid.body.result, "unpaid");
 
   const id = r.body.order.id;
@@ -192,30 +193,63 @@ test("проверка на билет на входа", async (t) => {
   const multi = body.order.tickets.find((x) => x.typeId === "multi");
 
   // На 21 окт билетът за 22 окт не е валиден.
-  assert.equal((await s.req("POST", "/api/admin/tickets/check", { code: std.code }, ADMIN)).body.result, "wrong_date");
+  assert.equal((await s.req("POST", "/api/scan/check", { code: std.code }, ADMIN)).body.result, "wrong_date");
 
   s.setNow(new Date("2026-10-22T09:00:00Z"));
   const qr = body.order.id + "|" + std.code;
-  assert.equal((await s.req("POST", "/api/admin/tickets/check", { code: qr }, ADMIN)).body.result, "ok");
-  const twice = await s.req("POST", "/api/admin/tickets/check", { code: std.code }, ADMIN);
+  assert.equal((await s.req("POST", "/api/scan/check", { code: qr }, ADMIN)).body.result, "ok");
+  const twice = await s.req("POST", "/api/scan/check", { code: std.code }, ADMIN);
   assert.equal(twice.body.result, "used");
   assert.ok(twice.body.ticket.usedAt);
 
   // Многократният билет минава всеки ден на събитието.
-  assert.equal((await s.req("POST", "/api/admin/tickets/check", { code: multi.code }, ADMIN)).body.result, "ok");
-  assert.equal((await s.req("POST", "/api/admin/tickets/check", { code: multi.code }, ADMIN)).body.result, "ok");
+  assert.equal((await s.req("POST", "/api/scan/check", { code: multi.code }, ADMIN)).body.result, "ok");
+  assert.equal((await s.req("POST", "/api/scan/check", { code: multi.code }, ADMIN)).body.result, "ok");
 
-  assert.equal((await s.req("POST", "/api/admin/tickets/check", { code: "AAAA-BBBB-CCCC" }, ADMIN)).status, 404);
-  assert.equal((await s.req("POST", "/api/admin/tickets/check", { code: std.code })).status, 401);
+  assert.equal((await s.req("POST", "/api/scan/check", { code: "AAAA-BBBB-CCCC" }, ADMIN)).status, 404);
+  assert.equal((await s.req("POST", "/api/scan/check", { code: std.code })).status, 401);
 
   const used = await s.req("GET", "/api/orders/" + body.order.id + "?email=ivan@example.com");
   assert.ok(used.body.order.tickets.find((x) => x.code === std.code).usedAt);
 });
 
+test("контрольорът може само да проверява билети", async (t) => {
+  const s = setup();
+  t.after(s.close);
+  const GATE = { authorization: "Bearer gate-token" };
+  const { body } = await s.req("POST", "/api/orders", orderInput({ date: "2026-10-21" }));
+
+  const me = await s.req("GET", "/api/scan/me", null, GATE);
+  assert.equal(me.status, 200);
+  assert.equal(me.body.role, "scanner");
+  assert.equal(me.body.today, "2026-10-21");
+  assert.deepEqual(me.body.events.map((e) => e.id), ["autumn-fair"]);
+
+  const ok = await s.req("POST", "/api/scan/check", { code: body.order.tickets[0].code }, GATE);
+  assert.equal(ok.body.result, "ok");
+  assert.equal(ok.body.ticket.holder, "Иван Петров");
+  assert.equal(ok.body.ticket.phone, undefined);
+
+  assert.equal((await s.req("GET", "/api/admin/orders", null, GATE)).status, 401);
+  assert.equal((await s.req("POST", "/api/admin/orders/" + body.order.id + "/mark-paid", null, GATE)).status, 401);
+  assert.equal((await s.req("GET", "/api/scan/me", null, ADMIN)).body.role, "admin");
+});
+
+test("твърде много грешни ключове блокират временно", async (t) => {
+  const s = setup();
+  t.after(s.close);
+  for (let i = 0; i < 20; i++) {
+    assert.equal((await s.req("GET", "/api/scan/me", null, { authorization: "Bearer guess" + i })).status, 401);
+  }
+  assert.equal((await s.req("GET", "/api/scan/me", null, { authorization: "Bearer guess" })).status, 429);
+  assert.equal((await s.req("GET", "/api/scan/me", null, ADMIN)).status, 429);
+});
+
 test("администраторският API е изключен без токен", async (t) => {
-  const s = setup({ adminToken: "" });
+  const s = setup({ adminToken: "", scannerToken: "" });
   t.after(s.close);
   assert.equal((await s.req("GET", "/api/admin/orders", null, ADMIN)).status, 503);
+  assert.equal((await s.req("POST", "/api/scan/check", { code: "X" }, ADMIN)).status, 503);
 });
 
 test("списък с поръчки за администратора", async (t) => {
@@ -235,6 +269,7 @@ test("невалиден JSON и статични файлове", async (t) => 
   const bad = await s.req("POST", "/api/orders", null, { "content-type": "application/json" });
   assert.equal(bad.status, 400);
   assert.equal((await s.req("GET", "/")).status, 200);
+  assert.equal((await s.req("GET", "/scan")).status, 200);
   assert.equal((await s.req("GET", "/assets/js/data.js")).status, 200);
   for (const p of ["/package.json", "/server/config.js", "/data/tickets.db", "/.env"]) {
     assert.equal((await s.req("GET", p)).status, 404, p);

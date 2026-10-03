@@ -58,6 +58,7 @@ function createApp({ config, db, catalog, mailer, clock = () => new Date() }) {
   const root = config.ROOT;
   app.use("/assets", express.static(path.join(root, "assets"), { maxAge: "1h" }));
   app.get(["/", "/index.html"], (req, res) => res.sendFile(path.join(root, "index.html")));
+  app.get(["/scan", "/scan.html"], (req, res) => res.sendFile(path.join(root, "scan.html")));
 
   const api = express.Router();
   api.use(express.json({ limit: "20kb" }));
@@ -117,14 +118,50 @@ function createApp({ config, db, catalog, mailer, clock = () => new Date() }) {
     res.json({ order: serializeOrder(row, db.getTickets(row.id), catalog) });
   });
 
+  // ---------- Достъп с токен ----------
+  // Връща ролята за подадения токен: "admin", "scanner" или null.
+  function roleFor(req) {
+    const m = /^Bearer (.+)$/.exec(req.get("authorization") || "");
+    if (!m) return null;
+    if (config.adminToken && safeEqual(m[1], config.adminToken)) return "admin";
+    if (config.scannerToken && safeEqual(m[1], config.scannerToken)) return "scanner";
+    return null;
+  }
+  // Броят се само неуспешните опити, за да не се спират скенерите на оживен вход.
+  const failedAuth = new Map();
+  const AUTH_WINDOW = 15 * 60 * 1000;
+  const AUTH_MAX_FAILS = 20;
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of failedAuth) if (v.reset <= now) failedAuth.delete(k);
+  }, AUTH_WINDOW).unref();
+  function requireRole(...roles) {
+    return (req, res, next) => {
+      if (!config.adminToken && !config.scannerToken) {
+        return res.status(503).json({ error: "Достъпът не е настроен (ADMIN_TOKEN / SCANNER_TOKEN)." });
+      }
+      const now = Date.now();
+      let f = failedAuth.get(req.ip);
+      if (f && f.reset <= now) { failedAuth.delete(req.ip); f = null; }
+      if (f && f.count >= AUTH_MAX_FAILS) {
+        return res.status(429).json({ error: "Твърде много неуспешни опити. Опитайте по-късно." });
+      }
+      const role = roleFor(req);
+      if (!role || !roles.includes(role)) {
+        if (!role) {
+          if (!f) { f = { count: 0, reset: now + AUTH_WINDOW }; failedAuth.set(req.ip, f); }
+          f.count++;
+        }
+        return res.status(401).json({ error: "Неоторизиран достъп." });
+      }
+      req.role = role;
+      next();
+    };
+  }
+
   // ---------- Администраторски API ----------
   const admin = express.Router();
-  admin.use((req, res, next) => {
-    if (!config.adminToken) return res.status(503).json({ error: "Администраторският достъп не е настроен (ADMIN_TOKEN)." });
-    const m = /^Bearer (.+)$/.exec(req.get("authorization") || "");
-    if (!m || !safeEqual(m[1], config.adminToken)) return res.status(401).json({ error: "Неоторизиран достъп." });
-    next();
-  });
+  admin.use(requireRole("admin"));
 
   admin.get("/orders", (req, res) => {
     const status = ["paid", "pending", "cancelled"].includes(req.query.status) ? req.query.status : null;
@@ -152,8 +189,23 @@ function createApp({ config, db, catalog, mailer, clock = () => new Date() }) {
     res.json({ order: serializeOrderAdmin(updated, db.getTickets(row.id), catalog), emailed });
   });
 
+  api.use("/admin", admin);
+
+  // ---------- Проверка на билети на входа (контрольори и администратори) ----------
+  const scan = express.Router();
+  scan.use(requireRole("admin", "scanner"));
+
+  // Проверка на токена при вход в страницата за сканиране.
+  scan.get("/me", (req, res) => {
+    const today = todayIn(config.timeZone, clock());
+    const events = catalog.events
+      .filter((e) => e.start <= today && today <= e.end)
+      .map((e) => ({ id: e.id, title: e.title, hours: e.hours }));
+    res.json({ role: req.role, today, events });
+  });
+
   // Проверка на билет на входа. Приема кода или съдържанието на QR кода („поръчка|код“).
-  admin.post("/tickets/check", express.json({ limit: "2kb" }), (req, res) => {
+  scan.post("/check", (req, res) => {
     const raw = String((req.body && req.body.code) || "").trim().toUpperCase();
     const code = raw.includes("|") ? raw.split("|").pop() : raw;
     const t = code && db.getTicket(code);
@@ -180,7 +232,7 @@ function createApp({ config, db, catalog, mailer, clock = () => new Date() }) {
     res.json({ result: "ok", message: "Валиден билет.", ticket: info });
   });
 
-  api.use("/admin", admin);
+  api.use("/scan", scan);
 
   api.use((req, res) => res.status(404).json({ error: "Не е намерено." }));
 
