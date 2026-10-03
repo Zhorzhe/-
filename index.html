@@ -168,7 +168,7 @@
       <div class="layout-2col">
         <form id="paymentForm" class="card" novalidate>
           <h2 id="h-payment">Плащане</h2>
-          <div class="demo-banner" role="note">
+          <div class="demo-banner" id="demoBanner" role="note">
             <strong>Демонстрационен режим.</strong> Не се извършва реално плащане. За тест използвайте карта <code>4242 4242 4242 4242</code>, произволна бъдеща дата и CVC.
           </div>
 
@@ -205,8 +205,8 @@
           <div id="bankFields" hidden>
             <p>Билетите ще бъдат активирани след постъпване на сумата по сметката. Резервацията е валидна 3 работни дни.</p>
             <dl class="bank-details">
-              <dt>Получател</dt><dd>[Наименование на организатора]</dd>
-              <dt>IBAN</dt><dd>[BGxx xxxx xxxx xxxx xxxx xx]</dd>
+              <dt>Получател</dt><dd id="bankRecipient">—</dd>
+              <dt>IBAN</dt><dd id="bankIban">—</dd>
               <dt>Основание</dt><dd>Номер на поръчката (показва се след потвърждение)</dd>
             </dl>
           </div>
@@ -238,6 +238,22 @@
     <section class="view" id="view-my-tickets" hidden aria-labelledby="h-my">
       <h1 id="h-my">Моите билети</h1>
       <p class="muted">Билетите се пазят в този браузър. Копие е изпратено и на имейла, посочен при поръчката.</p>
+      <form id="lookupForm" class="card lookup" novalidate>
+        <h2>Намери поръчка</h2>
+        <p class="muted">Купили сте от друго устройство? Въведете номера на поръчката и имейла.</p>
+        <div class="form-grid">
+          <div class="field">
+            <label for="lookupId">Номер на поръчка</label>
+            <input id="lookupId" placeholder="MPP-2026-XXXXXX" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="lookupEmail">Имейл</label>
+            <input id="lookupEmail" type="email" autocomplete="email">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-ghost">Търси</button>
+        <p class="muted" id="lookupMsg" role="status"></p>
+      </form>
       <div id="myTicketsList"></div>
     </section>
 

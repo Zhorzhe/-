@@ -52,20 +52,39 @@
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function randomCode(len) {
-    var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    var out = "";
-    var arr = new Uint32Array(len);
-    (window.crypto || window.msCrypto).getRandomValues(arr);
-    for (var i = 0; i < len; i++) out += chars[arr[i] % chars.length];
-    return out;
-  }
-
   function loadOrders() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch (e) { return []; }
   }
   function saveOrders(orders) {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(orders)); } catch (e) { /* без съхранение */ }
+  }
+  function upsertOrder(order) {
+    var orders = loadOrders().filter(function (o) { return o.id !== order.id; });
+    orders.push(order);
+    orders.sort(function (a, b) { return a.createdAt < b.createdAt ? -1 : 1; });
+    saveOrders(orders);
+    updateMyCount();
+  }
+
+  // ---------- Връзка със сървъра ----------
+  function api(method, url, body) {
+    return fetch(url, {
+      method: method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok) {
+          var err = new Error(data.error || "Грешка " + res.status);
+          err.status = res.status;
+          err.fields = data.fields || {};
+          throw err;
+        }
+        return data;
+      });
+    }, function () {
+      throw new Error("Няма връзка със сървъра. Проверете интернет връзката и опитайте отново.");
+    });
   }
 
   function ticketType(id) {
@@ -124,7 +143,7 @@
 
   function nav(target) {
     if (target === "events") { resetFlow(); goStep(1); }
-    else if (target === "my-tickets") { renderMyTickets(); showView("view-my-tickets"); }
+    else if (target === "my-tickets") { renderMyTickets(); showView("view-my-tickets"); refreshMyTickets(); }
     else if (target === "help") { showView("view-help"); }
   }
 
@@ -293,6 +312,7 @@
       phone: req("phone", null, function (v) { return PHONE_RE.test(v) ? "" : "Невалиден телефонен номер."; }),
       company: $("#company").value.trim(),
       newsletter: $("#newsletter").checked,
+      acceptTerms: true,
       invoice: null
     };
     req("email2", null, function (v) { return v.toLowerCase() === $("#email").value.trim().toLowerCase() ? "" : "Имейлите не съвпадат."; });
@@ -369,43 +389,10 @@
     $("#bankFields").hidden = !bank || !!free;
   }
 
-  // ---------- Създаване на поръчка ----------
-  function createOrder() {
-    var tot = calcTotals();
-    var ev = state.event;
-    var pending = payMethod() === "bank" && tot.total > 0;
-    var orderId = "MPP-" + new Date().getFullYear() + "-" + randomCode(6);
-    var tickets = [];
-    tot.lines.forEach(function (l) {
-      for (var i = 0; i < l.qty; i++) {
-        tickets.push({
-          code: randomCode(4) + "-" + randomCode(4) + "-" + randomCode(4),
-          typeId: l.type.id,
-          typeName: l.type.name,
-          price: l.type.price,
-          validFor: l.type.allDays ? "all" : state.date
-        });
-      }
-    });
-    var b = state.buyer;
-    return {
-      id: orderId,
-      createdAt: new Date().toISOString(),
-      status: pending ? "pending" : "paid",
-      paymentMethod: tot.total === 0 ? "free" : payMethod(),
-      event: { id: ev.id, title: ev.title, start: ev.start, end: ev.end, hours: ev.hours, pavilions: ev.pavilions, color: ev.color },
-      date: state.date,
-      buyer: { firstName: b.firstName, lastName: b.lastName, email: b.email, phone: b.phone, company: b.company, invoice: b.invoice },
-      subtotal: tot.subtotal,
-      discount: tot.discount,
-      total: tot.total,
-      tickets: tickets
-    };
-  }
-
   function ticketHtml(order, t) {
     var valid = t.validFor === "all" ? fmtRange(order.event) + " (всички дни)" : fmtDate(t.validFor);
     var pending = order.status === "pending";
+    var status = pending ? ["pending", "Очаква плащане"] : t.usedAt ? ["used", "Използван"] : ["", "Валиден"];
     return '<div class="ticket">' +
       '<div class="stub" style="background:' + order.event.color + '"></div>' +
       '<div class="t-body"><div class="t-info">' +
@@ -414,7 +401,7 @@
         "<p>📅 " + valid + "</p>" +
         "<p>🕒 " + escapeHtml(order.event.hours) + "</p>" +
         '<p class="t-code">' + t.code + "</p>" +
-        '<span class="status' + (pending ? " pending" : "") + '">' + (pending ? "Очаква плащане" : "Валиден") + "</span>" +
+        '<span class="status ' + status[0] + '">' + status[1] + "</span>" +
       "</div>" +
       '<div class="t-qr" data-qr="' + escapeHtml(order.id + "|" + t.code) + '" role="img" aria-label="QR код на билет ' + t.code + '"></div>' +
       "</div></div>";
@@ -436,13 +423,16 @@
     });
   }
 
-  function renderDone(order) {
+  function renderDone(order, emailed) {
     var pending = order.status === "pending";
+    var mailNote = emailed
+      ? "Изпратихме потвърждение на <strong>" + escapeHtml(order.buyer.email) + "</strong>."
+      : "Не успяхме да изпратим имейл в момента — билетите са запазени в „Моите билети“.";
     $("#h-done").textContent = pending ? "Поръчката е регистрирана" : "Поръчката е успешна!";
     $("#doneText").innerHTML = "Номер на поръчката: <strong>" + order.id + "</strong><br>" +
       (pending
-        ? "Моля, преведете " + fmtMoney(order.total) + " с основание <strong>" + order.id + "</strong>. Билетите ще станат валидни след получаване на плащането."
-        : "Изпратихме " + order.tickets.length + (order.tickets.length === 1 ? " билет" : " билета") + " на <strong>" + escapeHtml(order.buyer.email) + "</strong>. Можете да ги намерите и в „Моите билети“.");
+        ? "Моля, преведете " + fmtMoney(order.total) + " с основание <strong>" + order.id + "</strong>. Билетите ще станат валидни и ще бъдат изпратени по имейл след получаване на плащането.<br>" + mailNote
+        : mailNote + " Билетите са запазени и в „Моите билети“.");
     $("#doneTickets").innerHTML = order.tickets.map(function (t) { return ticketHtml(order, t); }).join("");
     drawQrCodes($("#doneTickets"));
   }
@@ -462,6 +452,21 @@
         '<div class="tickets-list">' + o.tickets.map(function (t) { return ticketHtml(o, t); }).join("") + "</div></div>";
     }).join("") + '<button class="btn btn-secondary" id="printMy">Принтирай всички</button>';
     drawQrCodes(box);
+  }
+
+  // Обновява статусите (напр. потвърден превод, използван билет) от сървъра.
+  function refreshMyTickets() {
+    var orders = loadOrders();
+    if (!orders.length) return;
+    Promise.all(orders.map(function (o) {
+      return api("GET", "/api/orders/" + encodeURIComponent(o.id) + "?email=" + encodeURIComponent(o.buyer.email))
+        .then(function (d) { return d.order; }, function () { return o; });
+    })).then(function (fresh) {
+      if (JSON.stringify(fresh) === JSON.stringify(orders)) return;
+      saveOrders(fresh);
+      updateMyCount();
+      if (!$("#view-my-tickets").hidden) renderMyTickets();
+    });
   }
 
   function updateMyCount() {
@@ -526,29 +531,47 @@
     $("#paymentError").textContent = "";
     if (!validatePayment()) return;
     var btn = $("#payBtn");
+    var tot = calcTotals();
+
+    // Демонстрационен режим: тестова карта за отказано плащане.
+    // При реален платежен оператор данните за картата се въвеждат на неговата страница
+    // и НЕ се изпращат към нашия сървър.
+    if (payMethod() === "card" && tot.total > 0 && $("#cardNumber").value.replace(/\D/g, "") === "4000000000000002") {
+      $("#paymentError").textContent = "Плащането е отказано от банката. Опитайте с друга карта.";
+      return;
+    }
+
     btn.disabled = true;
     btn.textContent = "Обработка…";
-    // Симулация на заявка към платежен оператор.
-    // При реална интеграция тук се извиква бекендът, който създава плащане
-    // при доставчика (напр. Borica, myPOS, Stripe) и връща резултата.
-    setTimeout(function () {
-      var digits = $("#cardNumber").value.replace(/\D/g, "");
-      if (payMethod() === "card" && calcTotals().total > 0 && digits === "4000000000000002") {
-        $("#paymentError").textContent = "Плащането е отказано от банката. Опитайте с друга карта.";
-        btn.disabled = false;
-        renderSummaries();
+    var b = state.buyer;
+    api("POST", "/api/orders", {
+      eventId: state.event.id,
+      date: state.date,
+      qty: state.qty,
+      paymentMethod: payMethod(),
+      buyer: {
+        firstName: b.firstName, lastName: b.lastName, email: b.email, phone: b.phone,
+        company: b.company, newsletter: b.newsletter, acceptTerms: b.acceptTerms, invoice: b.invoice
+      }
+    }).then(function (data) {
+      btn.disabled = false;
+      upsertOrder(data.order);
+      $("#paymentForm").reset();
+      renderDone(data.order, data.emailed);
+      goStep5();
+    }, function (err) {
+      btn.disabled = false;
+      renderSummaries();
+      var fieldIds = Object.keys(err.fields || {});
+      if (fieldIds.length) {
+        goStep(3);
+        fieldIds.forEach(function (id) { var el = $("#" + id); if (el) setError(el, err.fields[id]); });
+        var first = $("#" + fieldIds[0]);
+        if (first) first.focus();
         return;
       }
-      var order = createOrder();
-      var orders = loadOrders();
-      orders.push(order);
-      saveOrders(orders);
-      updateMyCount();
-      btn.disabled = false;
-      $("#paymentForm").reset();
-      renderDone(order);
-      goStep5(order);
-    }, 1200);
+      $("#paymentError").textContent = err.message;
+    });
   });
 
   function goStep5() {
@@ -565,6 +588,35 @@
     $("#invoiceFields").hidden = true;
   }
 
+  $("#lookupForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var msg = $("#lookupMsg");
+    var id = $("#lookupId").value.trim();
+    var email = $("#lookupEmail").value.trim();
+    if (!id || !EMAIL_RE.test(email)) { msg.textContent = "Въведете номер на поръчка и имейл."; return; }
+    msg.textContent = "Търсене…";
+    api("GET", "/api/orders/" + encodeURIComponent(id) + "?email=" + encodeURIComponent(email)).then(function (d) {
+      upsertOrder(d.order);
+      msg.textContent = "Поръчката е добавена.";
+      $("#lookupForm").reset();
+      renderMyTickets();
+    }, function (err) { msg.textContent = err.message; });
+  });
+
+  function applyServerConfig(cfg) {
+    var bank = cfg.bank || {};
+    $("#bankRecipient").textContent = bank.recipient || "—";
+    $("#bankIban").textContent = bank.iban || "—";
+    $("#demoBanner").hidden = cfg.paymentMode !== "demo";
+    if (!cfg.cardPayments) {
+      var card = $('input[name="payMethod"][value="card"]');
+      card.disabled = true;
+      card.closest("label").title = "Плащането с карта временно не е достъпно";
+      $('input[name="payMethod"][value="bank"]').checked = true;
+      togglePayMethod();
+    }
+  }
+
   // ---------- Старт ----------
   var g = DATA.groupDiscount;
   $("#groupInfo").textContent = "Да — при покупка на " + g.minTickets + " или повече платени билета в една поръчка получавате " +
@@ -573,4 +625,5 @@
   $("#year").textContent = new Date().getFullYear();
   updateMyCount();
   goStep(1);
+  api("GET", "/api/config").then(applyServerConfig, function () { /* сървърът ще върне грешка при поръчка */ });
 })();
